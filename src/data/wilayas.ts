@@ -1,0 +1,70 @@
+export interface WilayaDelivery {
+  id: number;
+  code: number;
+  name_ar: string;
+  name_en: string;
+  home_price: number;
+  office_price: number;
+  is_active: boolean;
+}
+
+export const ALGERIA_WILAYAS: Array<{ code: number; name_ar: string; name_en: string; home_price: number; office_price: number }> = [
+  { code: 1, name_ar: "أدرار", name_en: "Adrar", home_price: 900, office_price: 600 },
+  { code: 2, name_ar: "الشلف", name_en: "Chlef", home_price: 650, office_price: 450 },
+  { code: 3, name_ar: "الأغواط", name_en: "Laghouat", home_price: 750, office_price: 500 },
+  { code: 4, name_ar: "أم البواقي", name_en: "Oum El Bouaghi", home_price: 650, office_price: 450 },
+  { code: 5, name_ar: "باتنة", name_en: "Batna", home_price: 650, office_price: 450 },
+  { code: 6, name_ar: "بجاية", name_en: "Béjaïa", home_price: 600, office_price: 400 },
+  { code: 7, name_ar: "بسكرة", name_en: "Biskra", home_price: 750, office_price: 500 },
+  { code: 8, name_ar: "بشار", name_en: "Béchar", home_price: 900, office_price: 600 },
+  { code: 9, name_ar: "البليدة", name_en: "Blida", home_price: 500, office_price: 350 },
+  { code: 10, name_ar: "البويرة", name_en: "Bouira", home_price: 550, office_price: 350 },
+  { code: 11, name_ar: "تمنراست", name_en: "Tamanrasset", home_price: 1200, office_price: 800 },
+  { code: 12, name_ar: "تبسة", name_en: "Tébessa", home_price: 700, office_price: 450 },
+  { code: 13, name_ar: "تلمسان", name_en: "Tlemcen", home_price: 650, office_price: 450 },
+  { code: 14, name_ar: "تيارت", name_en: "Tiaret", home_price: 650, office_price: 450 },
+  { code: 15, name_ar: "تيزي وزو", name_en: "Tizi Ouzou", home_price: 550, office_price: 350 },
+  { code: 16, name_ar: "الجزائر", name_en: "Alger", home_price: 400, office_price: 250 },
+  { code: 17, name_ar: "الجلفة", name_en: "Djelfa", home_price: 700, office_price: 450 },
+  { code: 18, name_ar: "جيجل", name_en: "Jijel", home_price: 650, office_price: 450 },
+  { code: 19, name_ar: "سطيف", name_en: "Sétif", home_price: 600, office_price: 400 },
+  { code: 20, name_ar: "سعيدة", name_en: "Saïda", home_price: 700, office_price: 450 },
+  { code: 21, name_ar: "سكيكدة", name_en: "Skikda", home_price: 650, office_price: 450 },
+  { code: 22, name_ar: "سيدي بلعباس", name_en: "Sidi Bel Abbès", home_price: 650, office_price: 450 },
+  { code: 23, name_ar: "عنابة", name_en: "Annaba", home_price: 650, office_price: 450 },
+  { code: 24, name_ar: "قالمة", name_en: "Guelma", home_price: 650, office_price: 450 },
+  { code: 25, name_ar: "قسنطينة", name_en: "Constantine", home_price: 600, office_price: 400 },
+  { code: 26, name_ar: "المدية", name_en: "Médéa", home_price: 550, office_price: 350 },
+  { code: 27, name_ar: "مستغانم", name_en: "Mostaganem", home_price: 650, office_price: 450 },
+  { code: 28, name_ar: "المسيلة", name_en: "M'Sila", home_price: 650, office_price: 450 },
+  { code: 29, name_ar: "معسكر", name_en: "Mascara", home_price: 650, office_price: 450 },
+  { code: 30, name_ar: "ورقلة", name_en: "Ouargla", home_price: 800, office_price: 550 },
+  { code: 31, name_ar: "وهران", name_en: "Oran", home_price: 600, office_price: 400 },
+  { code: 32, name_ar: "البيض", name_en: "El Bayadh", home_price: 800, office_price: 550 },
+  { code: 33, name_ar: "إليزي", name_en: "Illizi", home_price: 1200, office_price: 800 },
+  { code: 34, name_ar: "برج بوعريريج", name_en: "Bordj Bou Arreridj", home_price: 600, office_price: 400 },
+  { code: 35, name_ar: "بومرداس", name_en: "Boumerdès", home_price: 500, office_price: 300 },
+  { code: 36, name_ar: "الطارف", name_en: "El Tarf", home_price: 700, office_price: 450 },
+  { code: 37, name_ar: "تندوف", name_en: "Tindouf", home_price: 1200, office_price: 800 },
+  { code: 38, name_ar: "تيسمسيلت", name_en: "Tissemsilt", home_price: 650, office_price: 450 },
+  { code: 39, name_ar: "الوادي", name_en: "El Oued", home_price: 750, office_price: 500 },
+  { code: 40, name_ar: "خنشلة", name_en: "Khenchela", home_price: 700, office_price: 450 },
+  { code: 41, name_ar: "سوق أهراس", name_en: "Souk Ahras", home_price: 700, office_price: 450 },
+  { code: 42, name_ar: "تيبازة", name_en: "Tipaza", home_price: 500, office_price: 300 },
+  { code: 43, name_ar: "ميلة", name_en: "Mila", home_price: 650, office_price: 450 },
+  { code: 44, name_ar: "عين الدفلى", name_en: "Aïn Defla", home_price: 600, office_price: 400 },
+  { code: 45, name_ar: "النعامة", name_en: "Naâma", home_price: 800, office_price: 550 },
+  { code: 46, name_ar: "عين تموشنت", name_en: "Aïn Témouchent", home_price: 650, office_price: 450 },
+  { code: 47, name_ar: "غرداية", name_en: "Ghardaïa", home_price: 800, office_price: 550 },
+  { code: 48, name_ar: "غليزان", name_en: "Relizane", home_price: 650, office_price: 450 },
+  { code: 49, name_ar: "تيميمون", name_en: "Timimoun", home_price: 950, office_price: 650 },
+  { code: 50, name_ar: "برج باجي مختار", name_en: "Bordj Badji Mokhtar", home_price: 1300, office_price: 900 },
+  { code: 51, name_ar: "أولاد جلال", name_en: "Ouled Djellal", home_price: 750, office_price: 500 },
+  { code: 52, name_ar: "بني عباس", name_en: "Béni Abbès", home_price: 950, office_price: 650 },
+  { code: 53, name_ar: "إن صالح", name_en: "In Salah", home_price: 1100, office_price: 750 },
+  { code: 54, name_ar: "إن قزام", name_en: "In Guezzam", home_price: 1300, office_price: 900 },
+  { code: 55, name_ar: "تقرت", name_en: "Touggourt", home_price: 800, office_price: 550 },
+  { code: 56, name_ar: "جانت", name_en: "Djanet", home_price: 1200, office_price: 800 },
+  { code: 57, name_ar: "المغير", name_en: "El M'Ghair", home_price: 800, office_price: 550 },
+  { code: 58, name_ar: "المنيعة", name_en: "El Meniaa", home_price: 850, office_price: 600 }
+];

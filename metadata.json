@@ -1,0 +1,6 @@
+{
+  "name": "كؤوس وأكواب الجزائر | متجر الكؤوس والبوكسات",
+  "description": "المتجر الجزائري الأول المتخصص في الأكواب الفاخرة والبوكسات المميزة مع توصيل متوفر لكافة ولايات الجزائر الـ 58 وخاصية الدفع عند الاستلام.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
