@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: glass-glow
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: glass-glow-sqlite
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1

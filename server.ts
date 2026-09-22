@@ -28,7 +28,7 @@ import {
 } from './server/db.ts';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PASSWORD = 'demo360';
 const productResponseCache = new Map<string, { expires: number; data: unknown }>();
 const clearProductCache = () => productResponseCache.clear();
