@@ -118,7 +118,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({ onBack, settings }
               type="tel"
               value={phone}
               onChange={e => setPhone(e.target.value)}
-              placeholder="مثال: 0550123456 أو 0661..."
+              placeholder="0550500500"
               className="w-full pr-11 pl-4 py-3 bg-slate-50 border border-slate-200 focus:border-emerald-600 focus:bg-white rounded-2xl text-slate-900 placeholder-slate-400 text-base font-semibold outline-none transition-all"
               dir="ltr"
               autoFocus

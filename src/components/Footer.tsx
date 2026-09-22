@@ -1,10 +1,8 @@
 import React from 'react';
-import { ShieldCheck, Truck, RotateCcw, Headphones, ShoppingBag } from 'lucide-react';
+import { ShieldCheck, Truck, RotateCcw, Headphones } from 'lucide-react';
 import { StoreSettings } from '../types';
 
 export const Footer: React.FC<{ settings: StoreSettings | null }> = ({ settings: _settings }) => {
-  const storeName = 'glassglow';
-
   return (
     <footer className="mt-20 border-t border-slate-200 bg-white">
       {/* مميزات المتجر والشارات */}
@@ -48,18 +46,6 @@ export const Footer: React.FC<{ settings: StoreSettings | null }> = ({ settings:
               <h4 className="text-sm font-bold text-slate-900">خدمة زبائن جزائرية</h4>
               <p className="text-xs text-slate-500">متابعة دقيقة لكل طلب</p>
             </div>
-          </div>
-        </div>
-
-        {/* سطر الحقوق */}
-        <div className="mt-10 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="w-4 h-4 text-emerald-600" />
-            <span>© {new Date().getFullYear()} {storeName} — متجر إلكتروني جزائري 100%.</span>
-          </div>
-          <div className="flex items-center gap-6 font-medium">
-            <span>الدفع بالدينار الجزائري (د.ج) عند الاستلام</span>
-            <span>توصيل سريع مضمون</span>
           </div>
         </div>
       </div>

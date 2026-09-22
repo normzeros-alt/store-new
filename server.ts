@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import { gzipSync } from 'node:zlib';
 import { createServer as createViteServer } from 'vite';
 import {
   getAllProducts,
@@ -20,16 +21,38 @@ import {
   updateStoreSettings,
   getAllWilayas,
   updateWilayaPrice,
-  bulkUpdateWilayas
+  bulkUpdateWilayas,
+  getAllCategories,
+  createCategory,
+  renameCategory,
+  deleteCategory
 } from './server/db.ts';
 
 const app = express();
 const PORT = 3000;
 const ADMIN_PASSWORD = 'demo360';
+const productResponseCache = new Map<string, { expires: number; data: unknown }>();
+const clearProductCache = () => productResponseCache.clear();
 const ADMIN_TOKEN = 'demo360_session_authorized';
 
 // Middlewares
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '25mb' }));
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = ((body: unknown) => {
+    const acceptsGzip = String(req.headers['accept-encoding'] || '').includes('gzip');
+    if (!acceptsGzip) return originalJson(body);
+    const payload = gzipSync(Buffer.from(JSON.stringify(body)));
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Vary', 'Accept-Encoding');
+    return res.end(payload);
+  }) as typeof res.json;
+  next();
+});
+
+process.on('uncaughtException', (error) => console.error('[server] uncaught exception', error));
+process.on('unhandledRejection', (error) => console.error('[server] unhandled rejection', error));
 
 // Helper: Admin authentication middleware
 function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -59,6 +82,12 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
+// Categories
+app.get('/api/categories', (req, res) => {
+  try { res.json(getAllCategories()); }
+  catch (err: any) { res.status(500).json({ error: err.message || 'خطأ في جلب التصنيفات' }); }
+});
+
 // Wilayas List (Public for checkout delivery selection)
 app.get('/api/wilayas', (req, res) => {
   try {
@@ -73,7 +102,11 @@ app.get('/api/wilayas', (req, res) => {
 app.get('/api/products', (req, res) => {
   try {
     const { category, search, sort } = req.query as { category?: string; search?: string; sort?: string };
-    const products = getAllProducts({ category, search, sort });
+    const cacheKey = JSON.stringify({ category: category || '', search: search || '', sort: sort || '' });
+    const cached = productResponseCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) return res.json(cached.data);
+    const products = getAllProducts({ category, search, sort }, false);
+    productResponseCache.set(cacheKey, { expires: Date.now() + 5000, data: products });
     res.json(products);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'خطأ في جلب المنتجات' });
@@ -93,7 +126,7 @@ app.get('/api/products/:id', (req, res) => {
     }
 
     // Include similar products from same category
-    const similar = getAllProducts({ category: product.category })
+    const similar = getAllProducts({ category: product.category }, false)
       .filter((p: any) => p.id !== product.id)
       .slice(0, 4);
 
@@ -249,18 +282,44 @@ app.put('/api/admin/wilayas-bulk', requireAdmin, (req, res) => {
   }
 });
 
-// Admin Add Product (supports multiple images array)
+// Admin Categories
+app.post('/api/admin/categories', requireAdmin, (req, res) => {
+  try {
+    const category = createCategory(req.body?.name);
+    res.status(201).json({ success: true, category });
+  } catch (err: any) { res.status(400).json({ error: err.message || 'خطأ في إضافة التصنيف' }); }
+});
+
+app.patch('/api/admin/categories/:name', requireAdmin, (req, res) => {
+  try {
+    const category = renameCategory(decodeURIComponent(req.params.name), req.body?.name);
+    res.json({ success: true, category });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'خطأ في تعديل التصنيف' });
+  }
+});
+
+app.delete('/api/admin/categories/:name', requireAdmin, (req, res) => {
+  try {
+    const deleted = deleteCategory(decodeURIComponent(req.params.name));
+    res.json({ success: deleted, message: deleted ? 'تم حذف التصنيف' : 'التصنيف غير موجود' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'خطأ في حذف التصنيف' });
+  }
+});
+
+// Admin Add Product (supports image data URLs)
 app.post('/api/admin/products', requireAdmin, (req, res) => {
   try {
-    const { name, price, description, category, images, image, stock, badge } = req.body;
+    const { name, price, description, category, images, image, badge, discountPrice, discountEnabled, discountStart, discountEnd } = req.body;
     if (!name || price === undefined) {
       return res.status(400).json({ error: 'اسم المنتج وسعره مطلوبان' });
     }
-    const finalCategory = category === 'البوكسات' ? 'البوكسات' : 'الكؤوس';
+    const finalCategory = String(category || 'الكؤوس').trim() || 'الكؤوس';
     let finalImages: string[] = [];
     if (Array.isArray(images) && images.length > 0) {
-      finalImages = images.filter(Boolean);
-    } else if (image) {
+      finalImages = images.filter((value: unknown) => typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('http://') || value.startsWith('https://'))).slice(0, 6);
+    } else if (typeof image === 'string' && image) {
       finalImages = [image];
     }
 
@@ -270,9 +329,13 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
       description: description || '',
       category: finalCategory,
       images: finalImages,
-      stock: Number(stock || 0),
-      badge: badge || ''
+      badge: badge || '',
+      discountPrice: Number(discountPrice || 0),
+      discountEnabled: Boolean(discountEnabled),
+      discountStart: discountStart || '',
+      discountEnd: discountEnd || ''
     });
+    clearProductCache();
     res.status(201).json({ success: true, product });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'خطأ في إضافة المنتج' });
@@ -287,6 +350,7 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
     if (!product) {
       return res.status(404).json({ error: 'المنتج غير موجود' });
     }
+    clearProductCache();
     res.json({ success: true, product });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'خطأ في تحديث المنتج' });
@@ -301,6 +365,7 @@ app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
     if (!ok) {
       return res.status(404).json({ error: 'المنتج غير موجود أو تم حذفه مسبقاً' });
     }
+    clearProductCache();
     res.json({ success: true, message: 'تم حذف المنتج بنجاح' });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'خطأ في حذف المنتج' });
@@ -327,11 +392,17 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
   }
 });
 
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[server] request error', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ success: false, error: 'حدث خطأ داخلي في الخادم' });
+});
+
 // ==========================================
 // Vite Middleware / Static Serving
 // ==========================================
 
-async function start() {
+export async function start() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -351,4 +422,8 @@ async function start() {
   });
 }
 
-start();
+export { app };
+
+if (process.env.NETLIFY !== 'true') {
+  start();
+}

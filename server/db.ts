@@ -43,6 +43,11 @@ db.exec(`
     rating REAL DEFAULT 4.9,
     reviews_count INTEGER DEFAULT 28,
     badge TEXT DEFAULT '',
+    discount_percent REAL NOT NULL DEFAULT 0,
+    discount_price REAL NOT NULL DEFAULT 0,
+    discount_enabled INTEGER NOT NULL DEFAULT 0,
+    discount_start TEXT,
+    discount_end TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -73,6 +78,23 @@ db.exec(`
   );
 `);
 
+// Indexes keep catalog and category searches fast as the store grows.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+  CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);
+  CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
+`);
+
+// Migration for existing databases created before custom categories were added.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Migration helper: If products or orders table already existed with old schema, ensure columns exist
 try {
   // Check if images column exists in products
@@ -81,6 +103,13 @@ try {
   if (!hasImages) {
     db.exec('ALTER TABLE products ADD COLUMN images TEXT NOT NULL DEFAULT "[]";');
   }
+
+  const discountColumns = db.prepare('PRAGMA table_info(products)').all() as any[];
+  if (!discountColumns.some(col => col.name === 'discount_percent')) db.exec('ALTER TABLE products ADD COLUMN discount_percent REAL NOT NULL DEFAULT 0;');
+  if (!discountColumns.some(col => col.name === 'discount_start')) db.exec('ALTER TABLE products ADD COLUMN discount_start TEXT;');
+  if (!discountColumns.some(col => col.name === 'discount_end')) db.exec('ALTER TABLE products ADD COLUMN discount_end TEXT;');
+  if (!discountColumns.some(col => col.name === 'discount_price')) db.exec('ALTER TABLE products ADD COLUMN discount_price REAL NOT NULL DEFAULT 0;');
+  if (!discountColumns.some(col => col.name === 'discount_enabled')) db.exec('ALTER TABLE products ADD COLUMN discount_enabled INTEGER NOT NULL DEFAULT 0;');
 
   // Check orders table columns
   const pragmaOrders = db.prepare('PRAGMA table_info(orders)').all() as any[];
@@ -100,8 +129,8 @@ try {
 const getSettingStmt = db.prepare('SELECT value FROM settings WHERE key = ?');
 const setSettingStmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
 
-// Force store name to glassglow as strictly required
-setSettingStmt.run('store_name', 'glassglow');
+// Store branding is fixed globally as Glass Glow.
+setSettingStmt.run('store_name', 'Glass Glow');
 if (!getSettingStmt.get('primary_color')) {
   setSettingStmt.run('primary_color', '#059669');
 }
@@ -115,6 +144,13 @@ if (!getSettingStmt.get('free_shipping_enabled')) {
 }
 if (!getSettingStmt.get('free_shipping_threshold')) {
   setSettingStmt.run('free_shipping_threshold', '5000');
+}
+
+// Seed product categories if table is empty
+const categoryCount = (db.prepare('SELECT COUNT(*) as count FROM categories').get() as { count: number }).count;
+if (categoryCount === 0) {
+  const insertCategory = db.prepare('INSERT OR IGNORE INTO categories (name) VALUES (?)');
+  for (const name of ['الكؤوس', 'البوكسات']) insertCategory.run(name);
 }
 
 // Seed Wilayas if table is empty
@@ -275,7 +311,7 @@ export function resetProducts() {
       );
     }
     db.exec('COMMIT;');
-    setSettingStmt.run('products_reset_v2', 'true');
+    setSettingStmt.run('products_reset_v3', 'true');
     return getAllProducts();
   } catch (err) {
     db.exec('ROLLBACK;');
@@ -286,7 +322,7 @@ export function resetProducts() {
 // Automatically wipe and recreate products if v2 reset hasn't run yet
 const countStmt = db.prepare('SELECT COUNT(*) as count FROM products');
 const currentCount = (countStmt.get() as { count: number }).count;
-const resetCheck = getSettingStmt.get('products_reset_v2');
+const resetCheck = getSettingStmt.get('products_reset_v3');
 
 if (currentCount === 0 || !resetCheck) {
   resetProducts();
@@ -296,7 +332,7 @@ if (currentCount === 0 || !resetCheck) {
 // Database Query Helper Functions
 // -------------------------------------------------------------
 
-function formatProductRow(row: any) {
+function formatProductRow(row: any, includeAllImages = true) {
   if (!row) return null;
   let parsedImages: string[] = [];
   try {
@@ -310,15 +346,21 @@ function formatProductRow(row: any) {
   }
   if (!Array.isArray(parsedImages)) parsedImages = [];
   const primaryImage = parsedImages[0] || row.image || 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&q=80';
+  const discountPrice = Math.max(0, Number(row.discount_price || 0));
+  const start = row.discount_start ? Date.parse(row.discount_start) : -Infinity;
+  const end = row.discount_end ? Date.parse(row.discount_end) : Infinity;
+  const activeDiscount = Boolean(row.discount_enabled) && discountPrice > 0 && discountPrice < Number(row.price) && Date.now() >= start && Date.now() <= end;
+  const salePrice = activeDiscount ? discountPrice : Number(row.price);
 
   return {
     ...row,
-    images: parsedImages.length > 0 ? parsedImages : [primaryImage],
-    image: primaryImage
+    images: includeAllImages ? (parsedImages.length > 0 ? parsedImages : [primaryImage]) : [primaryImage],
+    image: includeAllImages ? primaryImage : undefined,
+    discountPrice, discountEnabled: Boolean(row.discount_enabled), discountStart: row.discount_start || '', discountEnd: row.discount_end || '', salePrice
   };
 }
 
-export function getAllProducts(filter: { category?: string; search?: string; sort?: string } = {}) {
+export function getAllProducts(filter: { category?: string; search?: string; sort?: string } = {}, includeAllImages = true) {
   let sql = 'SELECT * FROM products WHERE 1=1';
   const params: any[] = [];
 
@@ -339,15 +381,13 @@ export function getAllProducts(filter: { category?: string; search?: string; sor
     sql += ' ORDER BY price DESC';
   } else if (filter.sort === 'name-asc') {
     sql += ' ORDER BY name ASC';
-  } else if (filter.sort === 'rating') {
-    sql += ' ORDER BY rating DESC';
   } else {
     sql += ' ORDER BY id DESC';
   }
 
   const stmt = db.prepare(sql);
   const rows = stmt.all(...params) as any[];
-  return rows.map(formatProductRow);
+  return rows.map(row => formatProductRow(row, includeAllImages));
 }
 
 export function getProductById(id: number) {
@@ -356,20 +396,52 @@ export function getProductById(id: number) {
   return formatProductRow(row);
 }
 
+export function getAllCategories() {
+  return (db.prepare('SELECT name FROM categories ORDER BY id ASC').all() as Array<{ name: string }>).map(row => row.name);
+}
+
+export function createCategory(name: string) {
+  const clean = String(name || '').trim();
+  if (!clean || clean.length > 40) throw new Error('اسم التصنيف غير صالح');
+  db.prepare('INSERT OR IGNORE INTO categories (name) VALUES (?)').run(clean);
+  return clean;
+}
+
+export function renameCategory(oldName: string, name: string) {
+  const clean = String(name || '').trim();
+  if (!clean || clean.length > 40) throw new Error('اسم التصنيف غير صالح');
+  if (oldName === clean) return clean;
+  const result = db.prepare('UPDATE categories SET name = ? WHERE name = ?').run(clean, oldName);
+  if (!result.changes) throw new Error('التصنيف غير موجود');
+  db.prepare('UPDATE products SET category = ? WHERE category = ?').run(clean, oldName);
+  return clean;
+}
+
+export function deleteCategory(name: string) {
+  const used = (db.prepare('SELECT COUNT(*) as count FROM products WHERE category = ?').get(name) as { count: number }).count;
+  if (used > 0) throw new Error('لا يمكن حذف تصنيف يحتوي على منتجات');
+  const result = db.prepare('DELETE FROM categories WHERE name = ?').run(name);
+  return result.changes > 0;
+}
+
 export function createProduct(data: {
   name: string;
   price: number;
   description: string;
-  category: 'الكؤوس' | 'البوكسات';
+  category: string;
   images: string[];
-  stock: number;
   badge?: string;
+  discountPrice?: number;
+  discountEnabled?: boolean;
+  discountStart?: string;
+  discountEnd?: string;
 }) {
   const stmt = db.prepare(`
-    INSERT INTO products (name, price, description, category, images, stock, badge)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO products (name, price, description, category, images, badge, discount_price, discount_enabled, discount_start, discount_end)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  const safeCategory = data.category === 'البوكسات' ? 'البوكسات' : 'الكؤوس';
+  const safeCategory = String(data.category || 'الكؤوس').trim() || 'الكؤوس';
+  createCategory(safeCategory);
   const imagesJson = JSON.stringify(Array.isArray(data.images) ? data.images.filter(Boolean) : []);
 
   const res = stmt.run(
@@ -378,8 +450,11 @@ export function createProduct(data: {
     data.description.trim(),
     safeCategory,
     imagesJson,
-    Math.max(0, parseInt(String(data.stock), 10)),
-    (data.badge || '').trim()
+    (data.badge || '').trim(),
+    Math.max(0, Number(data.discountPrice || 0)),
+    data.discountEnabled ? 1 : 0,
+    data.discountStart || null,
+    data.discountEnd || null
   );
   return getProductById(Number(res.lastInsertRowid));
 }
@@ -388,10 +463,13 @@ export function updateProduct(id: number, data: Partial<{
   name: string;
   price: number;
   description: string;
-  category: 'الكؤوس' | 'البوكسات';
+  category: string;
   images: string[];
-  stock: number;
   badge: string;
+  discountPrice: number;
+  discountEnabled: boolean;
+  discountStart: string;
+  discountEnd: string;
 }>) {
   const existing = getProductById(id);
   if (!existing) return null;
@@ -399,18 +477,22 @@ export function updateProduct(id: number, data: Partial<{
   const name = data.name !== undefined ? data.name.trim() : existing.name;
   const price = data.price !== undefined ? Math.max(0, Number(data.price)) : existing.price;
   const description = data.description !== undefined ? data.description.trim() : existing.description;
-  const category = data.category !== undefined ? (data.category === 'البوكسات' ? 'البوكسات' : 'الكؤوس') : existing.category;
-  const stock = data.stock !== undefined ? Math.max(0, parseInt(String(data.stock), 10)) : existing.stock;
+  const category = data.category !== undefined ? (String(data.category).trim() || existing.category) : existing.category;
+  createCategory(category);
   const badge = data.badge !== undefined ? data.badge.trim() : existing.badge;
+  const discountPrice = data.discountPrice !== undefined ? Math.max(0, Number(data.discountPrice)) : Number(existing.discountPrice || 0);
+  const discountEnabled = data.discountEnabled !== undefined ? Boolean(data.discountEnabled) : Boolean(existing.discountEnabled);
+  const discountStart = data.discountStart !== undefined ? (data.discountStart || null) : (existing.discountStart || null);
+  const discountEnd = data.discountEnd !== undefined ? (data.discountEnd || null) : (existing.discountEnd || null);
   const images = data.images !== undefined ? JSON.stringify(data.images.filter(Boolean)) : JSON.stringify(existing.images);
 
   const stmt = db.prepare(`
     UPDATE products
-    SET name = ?, price = ?, description = ?, category = ?, images = ?, stock = ?, badge = ?
+    SET name = ?, price = ?, description = ?, category = ?, images = ?, badge = ?, discount_price = ?, discount_enabled = ?, discount_start = ?, discount_end = ?
     WHERE id = ?
   `);
 
-  stmt.run(name, price, description, category, images, stock, badge, id);
+  stmt.run(name, price, description, category, images, badge, discountPrice, discountEnabled ? 1 : 0, discountStart, discountEnd, id);
   return getProductById(id);
 }
 
@@ -509,11 +591,7 @@ export function createOrder(data: {
       throw new Error(`المنتج رقم ${item.productId} لم يعد متوفراً في المتجر`);
     }
     const qty = Math.max(1, parseInt(String(item.quantity), 10));
-    if (product.stock < qty) {
-      throw new Error(`الكمية المطلوبة من "${product.name}" غير متوفرة (المتبقي: ${product.stock})`);
-    }
-
-    const itemPrice = Number(product.price);
+    const itemPrice = Number(product.salePrice ?? product.price);
     subtotal += itemPrice * qty;
     verifiedItems.push({
       productId: product.id,
@@ -562,15 +640,8 @@ export function createOrder(data: {
       VALUES (?, ?, ?, ?, ?)
     `);
 
-    const decrementStockStmt = db.prepare(`
-      UPDATE products
-      SET stock = stock - ?
-      WHERE id = ?
-    `);
-
     for (const vItem of verifiedItems) {
       insertItemStmt.run(orderId, vItem.productId, vItem.productName, vItem.price, vItem.quantity);
-      decrementStockStmt.run(vItem.quantity, vItem.productId);
     }
 
     db.exec('COMMIT;');
@@ -629,18 +700,6 @@ export function updateOrderStatus(orderId: number, newStatus: string) {
 
   db.exec('BEGIN TRANSACTION;');
   try {
-    if (newStatus === 'ملغي' && oldStatus !== 'ملغي') {
-      const restockStmt = db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?');
-      for (const item of order.items) {
-        restockStmt.run(item.quantity, item.product_id);
-      }
-    } else if (oldStatus === 'ملغي' && newStatus !== 'ملغي') {
-      const deductStmt = db.prepare('UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?');
-      for (const item of order.items) {
-        deductStmt.run(item.quantity, item.product_id);
-      }
-    }
-
     const updateStmt = db.prepare(`
       UPDATE orders
       SET status = ?, updated_at = CURRENT_TIMESTAMP
@@ -695,14 +754,11 @@ export function getStats() {
   const totalOrdersStmt = db.prepare('SELECT COUNT(*) as count FROM orders');
   const pendingOrdersStmt = db.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'جديد'");
   const totalProductsStmt = db.prepare('SELECT COUNT(*) as count FROM products');
-  const lowStockStmt = db.prepare('SELECT COUNT(*) as count FROM products WHERE stock <= 3');
-
   return {
     totalSales: (totalSalesStmt.get() as any).total,
     totalOrders: (totalOrdersStmt.get() as any).count,
     pendingOrders: (pendingOrdersStmt.get() as any).count,
-    totalProducts: (totalProductsStmt.get() as any).count,
-    lowStockCount: (lowStockStmt.get() as any).count
+    totalProducts: (totalProductsStmt.get() as any).count
   };
 }
 
@@ -713,25 +769,20 @@ export function getStoreSettings() {
     map[r.key] = r.value;
   }
   return {
-    storeName: 'glassglow',
     primaryColor: map['primary_color'] || '#059669',
     currency: 'د.ج', // Strictly Algerian Dinar
     announcement: map['announcement'] || 'توصيل متوفر لجميع الولايات الـ 58 والدفع عند الاستلام!',
     freeShippingEnabled: map['free_shipping_enabled'] === '1' || map['free_shipping_enabled'] === 'true',
-    freeShippingThreshold: Number(map['free_shipping_threshold'] || 5000)
+    freeShippingThreshold: Number(map['free_shipping_threshold'] || 15000)
   };
 }
 
 export function updateStoreSettings(settings: Partial<{
-  storeName: string;
   primaryColor: string;
   announcement: string;
   freeShippingEnabled: boolean;
   freeShippingThreshold: number;
 }>) {
-  if (settings.storeName !== undefined) {
-    setSettingStmt.run('store_name', settings.storeName.trim() || 'كؤوس وأكواب الجزائر');
-  }
   if (settings.primaryColor !== undefined) {
     setSettingStmt.run('primary_color', settings.primaryColor.trim() || '#059669');
   }

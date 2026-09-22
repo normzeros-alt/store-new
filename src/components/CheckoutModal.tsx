@@ -7,11 +7,15 @@ import { api } from '../lib/api';
 interface CheckoutModalProps {
   settings: StoreSettings | null;
   onOrderSuccess: (orderId: number) => void;
+  isPage?: boolean;
+  onClosePage?: () => void;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   settings,
-  onOrderSuccess
+  onOrderSuccess,
+  isPage = false,
+  onClosePage
 }) => {
   const { items, subtotal, isCheckoutOpen, setIsCheckoutOpen, clearCart } = useCart();
 
@@ -47,7 +51,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   }, [isCheckoutOpen]);
 
-  if (!isCheckoutOpen) return null;
+  if (!isPage) return null;
 
   // Find active wilaya and calculate delivery fee
   const selectedWilaya = wilayas.find(w => w.code === Number(formData.wilaya_code)) || wilayas[0];
@@ -96,9 +100,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+    <div className={isPage ? 'min-h-[70vh] bg-slate-50 py-8' : 'fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-xs animate-in fade-in duration-200'}>
       <div
-        className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden text-right flex flex-col max-h-[92vh]"
+        className={isPage ? 'relative mx-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white text-right shadow-sm' : 'relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white text-right shadow-2xl'}
         onClick={e => e.stopPropagation()}
       >
         {/* رأس النافذة */}
@@ -118,7 +122,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </div>
           <button
             type="button"
-            onClick={() => setIsCheckoutOpen(false)}
+            onClick={() => isPage ? onClosePage?.() : setIsCheckoutOpen(false)}
             className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors"
           >
             <X className="w-5 h-5" />
@@ -126,7 +130,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         </div>
 
         {/* محتوى النموذج أو رسالة النجاح */}
-        <div className="overflow-y-auto p-6 space-y-6">
+          <div className="space-y-6 overflow-y-auto p-6 sm:p-8">
           {completedOrder ? (
             <div className="text-center py-8 space-y-4">
               <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
@@ -165,28 +169,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* ملخص الطلب السريع */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                  <span>عدد المنتجات المختارة:</span>
-                  <span>{items.reduce((s, i) => s + i.quantity, 0)} قطع</span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-slate-600">
-                  <span>المجموع الفرعي للمنتجات:</span>
-                  <span className="font-bold">{subtotal.toLocaleString('fr-DZ')} {currency}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-slate-600">
-                  <span>تكلفة التوصيل ({selectedWilaya?.name_ar || ''}):</span>
-                  <span className={`font-bold ${isFreeShipping ? 'text-emerald-700' : 'text-slate-800'}`}>
-                    {isFreeShipping ? 'شحن مجاني' : `${deliveryPrice} ${currency}`}
-                  </span>
-                </div>
-                <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-sm font-bold text-slate-900">
-                  <span>المجموع الإجمالي عند الاستلام:</span>
-                  <span className="text-base text-emerald-700">{finalTotal.toLocaleString('fr-DZ')} {currency}</span>
-                </div>
-              </div>
-
               {/* بيانات الزبون الجزائري */}
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -235,9 +217,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-emerald-600 rounded-xl text-sm text-slate-900 outline-none cursor-pointer"
                   >
                     {wilayas.map(w => (
-                      <option key={w.code} value={w.code}>
-                        {w.code} - {w.name_ar} ({w.name_en}) — للمنزل: {w.home_price} د.ج / للمكتب: {w.office_price} د.ج
-                      </option>
+                      <option key={w.code} value={w.code}>{w.code} - {w.name_ar} ({w.name_en})</option>
                     ))}
                   </select>
                 </div>
@@ -332,6 +312,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               )}
 
+              {/* ملخص الطلب قبل التأكيد */}
+              <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-700"><span>عدد المنتجات المختارة:</span><span>{items.reduce((s, i) => s + i.quantity, 0)} قطع</span></div>
+                <div className="flex items-center justify-between text-xs text-slate-600"><span>المجموع الفرعي للمنتجات:</span><span className="font-bold">{subtotal.toLocaleString('fr-DZ')} {currency}</span></div>
+                <div className="flex items-center justify-between text-xs text-slate-600"><span>تكلفة التوصيل (الجزائر):</span><span className={`font-bold ${isFreeShipping ? 'text-emerald-700' : 'text-slate-800'}`}>{isFreeShipping ? 'شحن مجاني' : `${deliveryPrice} ${currency}`}</span></div>
+                <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-sm font-bold text-slate-900"><span>المجموع الإجمالي عند الاستلام:</span><span className="text-base text-emerald-700">{finalTotal.toLocaleString('fr-DZ')} {currency}</span></div>
+              </div>
+
               {/* زر تأكيد الطلب بنظام الدفع عند الاستلام */}
               <div className="space-y-3 pt-2">
                 <button
@@ -342,14 +330,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   {isSubmitting ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    <span>تأكيد الطلب الآن — الدفع نقداً عند الاستلام ({finalTotal.toLocaleString('fr-DZ')} {currency})</span>
+                    <span>تأكيد الطلب الآن</span>
                   )}
                 </button>
 
-                <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
-                  <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                  <span>دفع نقدي 100% عند وصول الطرد إلى يديك ومعاينته</span>
-                </div>
               </div>
             </form>
           )}

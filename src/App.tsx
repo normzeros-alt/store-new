@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Coffee, Box, Truck, ShieldCheck, Sparkles, Filter, ChevronLeft } from 'lucide-react';
+import { Coffee, Box, Filter } from 'lucide-react';
 import { Product, StoreSettings } from './types';
 import { api } from './lib/api';
 import { Header } from './components/Header';
@@ -10,6 +10,7 @@ import { OrderTracking } from './components/OrderTracking';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { AdminPanel } from './components/AdminPanel';
+import { SearchPage } from './components/SearchPage';
 
 export function App() {
   // Navigation / View state
@@ -22,12 +23,13 @@ export function App() {
   // Store data
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
 
   // Filters (Categories restricted to exactly 'ALL', 'الكؤوس', 'البوكسات')
-  const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'الكؤوس' | 'البوكسات'>('ALL');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'rating'>('default');
+  const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc'>('default');
 
   // Handle browser popstate
   useEffect(() => {
@@ -59,15 +61,19 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Fetch initial store settings
+  // Fetch initial store settings and categories
   useEffect(() => {
-    api.getSettings()
-      .then(res => setSettings(res))
+    Promise.all([api.getSettings(), api.getCategories()])
+      .then(([settingsRes, categoriesRes]) => { setSettings(settingsRes); setCategories(categoriesRes); })
       .catch(() => {});
   }, []);
 
   // Fetch products with filters
   useEffect(() => {
+    if (currentPath !== '/' ) {
+      setIsLoadingProducts(false);
+      return;
+    }
     setIsLoadingProducts(true);
     api.getProducts({
       category: selectedCategory,
@@ -77,7 +83,7 @@ export function App() {
       .then(res => setProducts(res))
       .catch(() => {})
       .finally(() => setIsLoadingProducts(false));
-  }, [selectedCategory, searchQuery, sortBy]);
+  }, [currentPath, selectedCategory, searchQuery, sortBy]);
 
   // If the path is /admin, ONLY show the AdminPanel (no buttons in the UI lead to it)
   if (currentPath === '/admin' || currentPath.startsWith('/admin/')) {
@@ -95,12 +101,16 @@ export function App() {
         onSearchChange={setSearchQuery}
         onNavigateHome={() => navigateTo('/')}
         onOpenTracking={() => navigateTo('/track')}
+        onOpenCart={() => navigateTo('/cart')}
+        onOpenSearch={() => navigateTo('/search')}
       />
 
       {/* المحتوى الرئيسي حسب المسار */}
       <main className="flex-1 flex flex-col">
         {/* صفحة تتبع الطلب برقم الهاتف */}
-        {currentPath === '/track' ? (
+        {currentPath === '/cart' || currentPath === '/checkout' ? null : currentPath === '/search' ? (
+          <SearchPage settings={settings} onBack={() => navigateTo('/')} onOpenProduct={p => navigateTo(`/product/${p.id}`)} />
+        ) : currentPath === '/track' ? (
           <OrderTracking
             onBack={() => navigateTo('/')}
             settings={settings}
@@ -115,43 +125,30 @@ export function App() {
           />
         ) : (
           /* واجهة المتجر الرئيسية والكتالوج الجزائري */
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full space-y-8">
-            {/* لافتة الترحيب والتسوق الجزائرية */}
-            <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-emerald-800 to-teal-900 text-white p-8 sm:p-12 shadow-lg">
-              <div className="relative z-10 max-w-2xl text-right space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-xs border border-white/20 text-xs font-semibold">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
-                  <span>المتجر الجزائري الأول للكؤوس الفاخرة وبوكسات الهدايا</span>
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 w-full space-y-5 sm:space-y-8">
+            <section className="rounded-3xl border border-slate-200 bg-white px-6 py-8 sm:px-10 sm:py-10 shadow-sm">
+              <div className="min-h-[300px] max-w-4xl space-y-5 text-right">
+                <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50/70 px-3 py-1.5 text-xs font-bold text-amber-800">
+                  <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  <span>Glass Glow · Premium Tableware</span>
                 </div>
-                <h1 className="text-2xl sm:text-4xl font-extrabold leading-tight tracking-tight">
+                <h1 className="text-2xl sm:text-4xl font-extrabold leading-tight tracking-tight text-slate-950">
                   تشكيلات راقية من الكؤوس والبوكسات الملكية
                 </h1>
-                <p className="text-sm text-emerald-100 leading-relaxed max-w-xl">
+                <p className="text-sm leading-relaxed text-slate-600">
                   استمتع بأفضل تجربة قهوة وشاي مع خامات سيراميك وزجاج حراري فاخر. نوفر خدمة التوصيل السريع إلى باب منزلك أو مكتب التوصيل لكافة ولايات الجزائر الـ 58 مع الدفع عند الاستلام.
                 </p>
-
-                {/* خيار الشحن المجاني الترويجي إن كان مفعلاً */}
-                {settings?.freeShippingEnabled && (
-                  <div className="inline-flex items-center gap-2 p-3 rounded-2xl bg-white/15 backdrop-blur-xs text-xs font-bold border border-white/25">
-                    <Truck className="w-4 h-4 text-emerald-300" />
-                    <span>توصيل مجاني 100% لجميع الطلبات التي تتجاوز {settings.freeShippingThreshold.toLocaleString('fr-DZ')} {currency}!</span>
-                  </div>
-                )}
               </div>
+            </section>
 
-              {/* عناصر ديكورية ناعمة */}
-              <div className="absolute -bottom-10 -left-10 w-64 h-64 bg-emerald-600/30 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute top-0 right-1/3 w-48 h-48 bg-teal-500/20 rounded-full blur-2xl pointer-events-none" />
-            </div>
-
-            {/* أدوات التصفية: مقتصرة تماماً على فئتي (الكؤوس) و (البوكسات) */}
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* أدوات التصفية للفئات المتاحة */}
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
               {/* تبويبات الفئات: فقط الكؤوس والبوكسات */}
-              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+              <div className="flex items-center gap-2 w-full sm:w-auto min-w-0 overflow-x-auto pb-1 sm:pb-0 snap-x snap-mandatory scrollbar-none">
                 <button
                   type="button"
                   onClick={() => setSelectedCategory('ALL')}
-                  className={`h-10 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                  className={`h-10 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer shrink-0 snap-start ${
                     selectedCategory === 'ALL'
                       ? 'bg-emerald-700 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -160,46 +157,31 @@ export function App() {
                   <span>جميع المنتجات</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory('الكؤوس')}
-                  className={`h-10 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-                    selectedCategory === 'الكؤوس'
-                      ? 'bg-emerald-700 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  <Coffee className="w-4 h-4" />
-                  <span>الكؤوس (الأكواب الفردية)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory('البوكسات')}
-                  className={`h-10 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-                    selectedCategory === 'البوكسات'
-                      ? 'bg-emerald-700 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  <Box className="w-4 h-4" />
-                  <span>البوكسات (مجموعات الأكواب)</span>
-                </button>
+                {categories.map(category => (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setSelectedCategory(category)}
+                    className={`h-10 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer shrink-0 snap-start ${
+                      selectedCategory === category ? 'bg-emerald-700 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>{category}</span>
+                  </button>
+                ))}
               </div>
 
               {/* الترتيب حسب السعر والتقييم */}
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end text-xs">
-                <Filter className="w-4 h-4 text-slate-400" />
-                <span className="text-slate-500 font-medium">ترتيب حسب:</span>
+              <div className="flex w-full items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs sm:w-auto sm:justify-end sm:border-0 sm:pt-0">
+                <div className="flex items-center gap-2 text-slate-500"><Filter className="h-4 w-4 text-emerald-700" /><span className="font-bold">ترتيب حسب</span></div>
                 <select
                   value={sortBy}
                   onChange={e => setSortBy(e.target.value as any)}
-                  className="h-10 px-3 bg-slate-50 border border-slate-200 focus:border-emerald-600 rounded-xl text-xs font-bold text-slate-900 outline-none cursor-pointer"
+                  className="h-10 min-w-36 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-sm outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100 cursor-pointer"
                 >
                   <option value="default">الأحدث إضافة</option>
                   <option value="price-asc">الأقل سعراً</option>
                   <option value="price-desc">الأعلى سعراً</option>
-                  <option value="rating">الأعلى تقييماً</option>
                 </select>
               </div>
             </div>
@@ -243,19 +225,24 @@ export function App() {
       </main>
 
       {/* سلة المشتريات الجانبية */}
-      <CartDrawer
-        currency={currency}
-        onNavigateShopping={() => navigateTo('/')}
-      />
+          <CartDrawer
+            currency={currency}
+            onNavigateShopping={() => navigateTo('/')}
+            isPage={currentPath === '/cart'}
+            onNavigateCheckout={() => navigateTo('/checkout')}
+            onClosePage={() => navigateTo('/')}
+          />
 
       {/* نافذة تأكيد الطلب بنظام الدفع عند الاستلام */}
       <CheckoutModal
-        settings={settings}
-        onOrderSuccess={() => {}}
+          settings={settings}
+          onOrderSuccess={() => {}}
+          isPage={currentPath === '/checkout'}
+          onClosePage={() => navigateTo('/')}
       />
 
       {/* التذييل */}
-      <Footer settings={settings} />
+      {currentPath === '/' && <Footer settings={settings} />}
     </div>
   );
 }

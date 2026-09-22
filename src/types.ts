@@ -3,13 +3,17 @@ export interface Product {
   name: string;
   price: number;
   description: string;
-  category: 'الكؤوس' | 'البوكسات';
+  category: string;
   images: string[];
   image?: string; // fallback
-  stock: number;
   rating?: number;
   reviews_count?: number;
   badge?: string;
+  discountPrice?: number;
+  discountEnabled?: boolean;
+  discountStart?: string;
+  discountEnd?: string;
+  salePrice?: number;
   created_at?: string;
   similar?: Product[];
 }
@@ -57,7 +61,6 @@ export interface CustomerData {
 }
 
 export interface StoreSettings {
-  storeName: string;
   primaryColor: string;
   currency: string;
   announcement?: string;
@@ -70,7 +73,6 @@ export interface AdminStats {
   totalOrders: number;
   pendingOrders: number;
   totalProducts: number;
-  lowStockCount: number;
 }
 
 export interface Wilaya {

@@ -44,16 +44,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems(prev => {
       const idx = prev.findIndex(item => item.product.id === product.id);
       const safeQty = Math.max(1, quantity);
-      const maxStock = product.stock || 999;
 
       if (idx > -1) {
         const currentQty = prev[idx].quantity;
-        const newQty = Math.min(maxStock, currentQty + safeQty);
+        const newQty = currentQty + safeQty;
         const updated = [...prev];
         updated[idx] = { ...updated[idx], quantity: newQty };
         return updated;
       } else {
-        const initialQty = Math.min(maxStock, safeQty);
+        const initialQty = safeQty;
         return [...prev, { product, quantity: initialQty }];
       }
     });
@@ -71,8 +70,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems(prev =>
       prev.map(item => {
         if (item.product.id === productId) {
-          const maxStock = item.product.stock || 999;
-          return { ...item, quantity: Math.min(maxStock, quantity) };
+          return { ...item, quantity };
         }
         return item;
       })
@@ -88,7 +86,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const totalCount = items.reduce((acc, curr) => acc + curr.quantity, 0);
-  const subtotal = items.reduce((acc, curr) => acc + curr.product.price * curr.quantity, 0);
+  const subtotal = items.reduce((acc, curr) => acc + (curr.product.salePrice ?? curr.product.price) * curr.quantity, 0);
 
   return (
     <CartContext.Provider

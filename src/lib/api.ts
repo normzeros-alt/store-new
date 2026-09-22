@@ -58,6 +58,8 @@ export function request<T>(endpoint: string, options: { method?: string; body?: 
   });
 }
 
+const productCache = new Map<string, { expires: number; promise: Promise<Product[]> }>();
+
 export const api = {
   getProducts: (params?: { category?: string; search?: string; sort?: string }) => {
     const q = new URLSearchParams();
@@ -65,12 +67,19 @@ export const api = {
     if (params?.search) q.set('search', params.search);
     if (params?.sort) q.set('sort', params.sort);
     const qs = q.toString();
-    return request<Product[]>(`/api/products${qs ? `?${qs}` : ''}`);
+    const endpoint = `/api/products${qs ? `?${qs}` : ''}`;
+    const cached = productCache.get(endpoint);
+    if (cached && cached.expires > Date.now()) return cached.promise;
+    const promise = request<Product[]>(endpoint);
+    productCache.set(endpoint, { expires: Date.now() + 5000, promise });
+    return promise;
   },
 
   getProduct: (id: number) => {
     return request<Product & { similar?: Product[] }>(`/api/products/${id}`);
   },
+
+  getCategories: () => request<string[]>('/api/categories'),
 
   getSettings: () => {
     return request<StoreSettings>('/api/settings');
@@ -139,6 +148,18 @@ export const api = {
       body: { wilayas }
     });
   },
+
+  createCategory: (name: string, token: string) => request<{ success: boolean; category: string }>('/api/admin/categories', {
+    method: 'POST', headers: { 'x-admin-token': token }, body: { name }
+  }),
+
+  renameCategory: (oldName: string, name: string, token: string) => request<{ success: boolean; category: string }>(`/api/admin/categories/${encodeURIComponent(oldName)}`, {
+    method: 'PATCH', headers: { 'x-admin-token': token }, body: { name }
+  }),
+
+  deleteCategory: (name: string, token: string) => request<{ success: boolean; message: string }>(`/api/admin/categories/${encodeURIComponent(name)}`, {
+    method: 'DELETE', headers: { 'x-admin-token': token }
+  }),
 
   createProduct: (data: Partial<Product>, token: string) => {
     return request<{ success: boolean; product: Product }>('/api/admin/products', {

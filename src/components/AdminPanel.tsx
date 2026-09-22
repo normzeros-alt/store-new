@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   Package, ShoppingCart, DollarSign, Settings, LogOut, Plus, Trash2,
-  Edit2, Save, X, Eye, Truck, Check, AlertCircle, RefreshCw, Upload, Images
+  Edit2, Save, X, Eye, Truck, Check, AlertCircle, RefreshCw, Upload, Images, Menu
 } from 'lucide-react';
 import { Product, Order, StoreSettings, AdminStats, Wilaya } from '../types';
 import { api } from '../lib/api';
+import { BrandMark } from './BrandMark';
 
 export const AdminPanel: React.FC = () => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('admin_token_dz'));
@@ -12,10 +13,17 @@ export const AdminPanel: React.FC = () => {
   const [loginError, setLoginError] = useState('');
   const [isLoadingLogin, setIsLoadingLogin] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'wilayas' | 'settings'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'categories' | 'wilayas' | 'settings'>(() => {
+    const part = window.location.pathname.split('/')[2];
+    return part === 'products' || part === 'categories' || part === 'wilayas' || part === 'settings' ? part : 'orders';
+  });
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isProductPage, setIsProductPage] = useState(() => window.location.pathname === '/admin/products/new');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [newCategory, setNewCategory] = useState('');
   const [wilayas, setWilayas] = useState<Wilaya[]>([]);
   const [settings, setSettings] = useState<StoreSettings | null>(null);
 
@@ -24,7 +32,7 @@ export const AdminPanel: React.FC = () => {
 
   // حالة إضافة/تعديل منتج (مع صور متعددة)
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
-  const [productImagesInput, setProductImagesInput] = useState<string[]>(['']);
+  const [productImagesInput, setProductImagesInput] = useState<string[]>([]);
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
 
   // حالة البحث والتصفية للولايات
@@ -32,6 +40,24 @@ export const AdminPanel: React.FC = () => {
   const [isSavingWilayas, setIsSavingWilayas] = useState(false);
 
   // إشعار
+  const navigateAdmin = (tab: 'orders' | 'products' | 'categories' | 'wilayas' | 'settings') => {
+    window.history.pushState({}, '', `/admin/${tab}`);
+    setActiveTab(tab);
+    setIsProductPage(false);
+    setIsMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    const onPopState = () => {
+      const part = window.location.pathname.split('/')[2];
+      setIsProductPage(window.location.pathname === '/admin/products/new');
+      setActiveTab(part === 'products' || part === 'categories' || part === 'wilayas' || part === 'settings' ? part : 'orders');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   const notify = (text: string, type: 'success' | 'error' = 'success') => {
     setStatusMessage({ text, type });
     setTimeout(() => setStatusMessage(null), 3500);
@@ -67,16 +93,18 @@ export const AdminPanel: React.FC = () => {
     if (!token) return;
     setIsLoadingData(true);
     try {
-      const [s, ords, prods, wils, setts] = await Promise.all([
+      const [s, ords, prods, categoryList, wils, setts] = await Promise.all([
         api.getAdminStats(token),
         api.getAdminOrders(token),
         api.getProducts(),
+        api.getCategories(),
         api.getAdminWilayas(token),
         api.getSettings()
       ]);
       setStats(s);
       setOrders(ords);
       setProducts(prods);
+      setCategories(categoryList);
       setWilayas(wils);
       setSettings(setts);
     } catch (err: any) {
@@ -95,6 +123,18 @@ export const AdminPanel: React.FC = () => {
       loadAdminData();
     }
   }, [token]);
+
+  const handleDeleteFinishedOrders = async () => {
+    if (!token || !confirm('هل تريد حذف جميع الطلبات المكتملة والملغاة؟')) return;
+    try {
+      const res = await api.deleteFinishedOrders(token);
+      setOrders(prev => prev.filter(order => order.status !== 'مكتمل' && order.status !== 'ملغي'));
+      notify(res.message || 'تم حذف الطلبات المنتهية بنجاح');
+      await loadAdminData();
+    } catch (err: any) {
+      notify(err.message || 'فشل حذف الطلبات المنتهية', 'error');
+    }
+  };
 
   // تحديث حالة الطلب
   const handleUpdateOrderStatus = async (orderId: number, newStatus: string) => {
@@ -117,33 +157,32 @@ export const AdminPanel: React.FC = () => {
       const imgs = product.images && product.images.length > 0 ? product.images : [product.image || ''];
       setProductImagesInput(imgs);
     } else {
+      window.history.pushState({}, '', '/admin/products/new');
+      setIsProductPage(true);
       setEditingProduct({
         name: '',
         price: 2500,
         description: '',
-        category: 'الكؤوس',
-        stock: 15,
-        badge: ''
+        category: categories[0] || 'الكؤوس',
+        badge: '',
+        discountPrice: 0,
+        discountEnabled: false,
+        discountStart: '',
+        discountEnd: ''
       });
       setProductImagesInput(['']);
     }
   };
 
-  // إضافة حقل صورة جديد
-  const handleAddImageField = () => {
-    setProductImagesInput(prev => [...prev, '']);
-  };
-
-  const handleUpdateImageUrl = (index: number, val: string) => {
-    setProductImagesInput(prev => {
-      const copy = [...prev];
-      copy[index] = val;
-      return copy;
-    });
-  };
-
-  const handleRemoveImageField = (index: number) => {
-    setProductImagesInput(prev => prev.filter((_, i) => i !== index));
+  const handleImageFiles = (files: FileList | null) => {
+    if (!files) return;
+    const selected = Array.from(files).slice(0, 6);
+    Promise.all(selected.map(file => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('تعذر قراءة الصورة'));
+      reader.readAsDataURL(file);
+    }))).then(images => setProductImagesInput(images)).catch(() => notify('تعذر قراءة إحدى الصور', 'error'));
   };
 
   // حفظ المنتج
@@ -151,9 +190,9 @@ export const AdminPanel: React.FC = () => {
     e.preventDefault();
     if (!token || !editingProduct) return;
 
-    const validImages = productImagesInput.map(u => u.trim()).filter(Boolean);
+    const validImages = productImagesInput.filter(Boolean);
     if (validImages.length === 0) {
-      notify('يرجى إضافة رابط صورة واحدة على الأقل للمنتج', 'error');
+      notify('يرجى اختيار صورة واحدة على الأقل للمنتج', 'error');
       return;
     }
 
@@ -170,14 +209,14 @@ export const AdminPanel: React.FC = () => {
         if (res.success) {
           notify('تم تعديل المنتج بنجاح');
           setProducts(prev => prev.map(p => p.id === res.product.id ? res.product : p));
-          setEditingProduct(null);
+          setEditingProduct(null); setIsProductPage(false); window.history.pushState({}, '', '/admin/products');
         }
       } else {
         const res = await api.createProduct(payload, token);
         if (res.success) {
           notify('تمت إضافة المنتج الجديد بنجاح');
           setProducts(prev => [res.product, ...prev]);
-          setEditingProduct(null);
+          setEditingProduct(null); setIsProductPage(false); window.history.pushState({}, '', '/admin/products');
         }
       }
     } catch (err: any) {
@@ -185,6 +224,37 @@ export const AdminPanel: React.FC = () => {
     } finally {
       setIsSubmittingProduct(false);
     }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!token || !newCategory.trim()) return;
+    try {
+      const res = await api.createCategory(newCategory.trim(), token);
+      setCategories(prev => prev.includes(res.category) ? prev : [...prev, res.category]);
+      setNewCategory('');
+      notify('تمت إضافة التصنيف بنجاح');
+    } catch (err: any) { notify(err.message || 'فشل إضافة التصنيف', 'error'); }
+  };
+
+  const handleRenameCategory = async (category: string) => {
+    if (!token) return;
+    const nextName = window.prompt('اكتب الاسم الجديد للتصنيف', category)?.trim();
+    if (!nextName || nextName === category) return;
+    try {
+      const res = await api.renameCategory(category, nextName, token);
+      setCategories(prev => prev.map(item => item === category ? res.category : item));
+      setProducts(prev => prev.map(product => product.category === category ? { ...product, category: res.category } : product));
+      notify('تم تعديل التصنيف بنجاح');
+    } catch (err: any) { notify(err.message || 'فشل تعديل التصنيف', 'error'); }
+  };
+
+  const handleDeleteCategory = async (category: string) => {
+    if (!token || !confirm(`هل تريد حذف تصنيف "${category}"؟ يجب ألا يحتوي على منتجات.`)) return;
+    try {
+      await api.deleteCategory(category, token);
+      setCategories(prev => prev.filter(item => item !== category));
+      notify('تم حذف التصنيف بنجاح');
+    } catch (err: any) { notify(err.message || 'فشل حذف التصنيف', 'error'); }
   };
 
   // حذف منتج
@@ -222,7 +292,7 @@ export const AdminPanel: React.FC = () => {
       const res = await api.bulkUpdateWilayas(list, token);
       if (res.success) {
         setWilayas(res.wilayas);
-        notify('تم حفظ أسعار التوصيل لجميع الولايات بنجاح! 🇩🇿');
+        notify('تم حفظ أسعار التوصيل لجميع الولايات بنجاح');
       }
     } catch (err: any) {
       notify(err.message || 'فشل حفظ أسعار الولايات', 'error');
@@ -247,33 +317,12 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  // تصدير نسخة احتياطية
-  const handleExportData = () => {
-    if (!token) return;
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', '/api/admin/export');
-    xhr.setRequestHeader('x-admin-token', token);
-    xhr.onload = () => {
-      if (xhr.status === 200) {
-        const blob = new Blob([xhr.responseText], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `dz-cups-backup-${new Date().toISOString().slice(0, 10)}.json`;
-        a.click();
-      }
-    };
-    xhr.send();
-  };
-
   // شاشة تسجيل الدخول إن لم يكن مسجلاً
   if (!token) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-8 shadow-xl text-right">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center mx-auto mb-6">
-            <Settings className="w-7 h-7" />
-          </div>
+          <BrandMark className="w-14 h-14 rounded-2xl mx-auto mb-6" />
 
           <h2 className="text-xl font-bold text-slate-900 text-center mb-1">
             لوحة تحكم المتجر الجزائري
@@ -342,20 +391,22 @@ export const AdminPanel: React.FC = () => {
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center font-bold">
-              DZ
-            </div>
+            <BrandMark className="w-9 h-9 rounded-xl" />
             <div>
               <h1 className="text-sm sm:text-base font-extrabold text-slate-900">
-                لوحة إدارة المتجر 🇩🇿
+                لوحة إدارة Glass Glow
               </h1>
               <span className="text-[11px] text-slate-400 block">
-                كؤوس وأكواب الجزائر | متجر الكؤوس والبوكسات
+                إدارة Glass Glow
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setIsMenuOpen(v => !v)} className="md:hidden h-9 w-9 rounded-xl border border-slate-200 text-slate-700 flex items-center justify-center" aria-label="فتح قائمة الإدارة">
+              <Menu className="h-4 w-4" />
+            </button>
+            <div className="hidden md:flex items-center gap-3">
             <a
               href="/"
               target="_blank"
@@ -373,8 +424,16 @@ export const AdminPanel: React.FC = () => {
               <LogOut className="w-3.5 h-3.5" />
               <span>تسجيل خروج</span>
             </button>
+            </div>
           </div>
         </div>
+        {isMenuOpen && (
+          <nav className="md:hidden border-t border-slate-100 bg-white p-3 space-y-1">
+            {([['orders', 'إدارة الطلبات'], ['products', 'إدارة المنتجات'], ['categories', 'إدارة التصنيفات'], ['wilayas', 'أسعار التوصيل'], ['settings', 'إعدادات المتجر']] as const).map(([tab, label]) => (
+              <button key={tab} type="button" onClick={() => navigateAdmin(tab)} className={`w-full rounded-xl px-4 py-3 text-right text-sm font-bold ${activeTab === tab ? 'bg-emerald-700 text-white' : 'text-slate-700 hover:bg-slate-50'}`}>{label}</button>
+            ))}
+          </nav>
+        )}
       </header>
 
       {/* رسالة النجاح أو التنبيه */}
@@ -406,20 +465,20 @@ export const AdminPanel: React.FC = () => {
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
               <span className="text-xs text-slate-500 block mb-1">طلبات جديدة قيد المراجعة</span>
-              <span className="text-2xl font-extrabold text-amber-600">{stats.pendingOrders}</span>
+              <span className="text-2xl font-extrabold text-slate-900">{stats.pendingOrders}</span>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs text-slate-500 block mb-1">عدد المنتجات (كؤوس وبوكسات)</span>
+              <span className="text-xs text-slate-500 block mb-1">عدد المنتجات</span>
               <span className="text-2xl font-extrabold text-slate-900">{stats.totalProducts}</span>
             </div>
           </div>
         )}
 
         {/* أشرطة التبويب الرئيسية للوحة التحكم */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-1.5 flex gap-1 overflow-x-auto">
+        <div className="hidden md:flex bg-white rounded-2xl border border-slate-200 p-1.5 gap-1 overflow-x-auto">
           <button
-            onClick={() => setActiveTab('orders')}
+            onClick={() => navigateAdmin('orders')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
               activeTab === 'orders' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
             }`}
@@ -432,33 +491,43 @@ export const AdminPanel: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab('products')}
+            onClick={() => navigateAdmin('products')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
               activeTab === 'products' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             <Package className="w-4 h-4" />
-            <span>إدارة المنتجات (كؤوس وبوكسات)</span>
+            <span>إدارة المنتجات</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('wilayas')}
+            onClick={() => navigateAdmin('categories')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
+              activeTab === 'categories' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Plus className="w-4 h-4" />
+            <span>إدارة التصنيفات</span>
+          </button>
+
+          <button
+            onClick={() => navigateAdmin('wilayas')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
               activeTab === 'wilayas' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             <Truck className="w-4 h-4" />
-            <span>أسعار توصيل الـ 58 ولاية (المنزل والمكتب)</span>
+            <span>أسعار التوصيل</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('settings')}
+            onClick={() => navigateAdmin('settings')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
               activeTab === 'settings' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             <Settings className="w-4 h-4" />
-            <span>إعدادات الشحن المجاني والمتجر</span>
+            <span>إعدادات المتجر</span>
           </button>
         </div>
 
@@ -469,17 +538,22 @@ export const AdminPanel: React.FC = () => {
           <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-slate-900 text-base">سجل الطلبات الواردة (الدفع عند الاستلام)</h3>
-                <p className="text-xs text-slate-500">يمكنك تحديث الحالة ليراها الزبون في صفحة التتبع فوراً</p>
+                <h3 className="font-bold text-slate-900 text-base">سجل الطلبات الواردة</h3>
               </div>
-              <button
-                onClick={loadAdminData}
-                disabled={isLoadingData}
-                className="p-2 text-slate-500 hover:text-emerald-700 hover:bg-slate-50 rounded-xl"
-                title="تحديث البيانات"
-              >
-                <RefreshCw className={`w-4 h-4 ${isLoadingData ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={handleDeleteFinishedOrders} className="px-3 py-2 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold inline-flex items-center gap-1.5">
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>حذف الطلبات المنتهية</span>
+                </button>
+                <button
+                  onClick={loadAdminData}
+                  disabled={isLoadingData}
+                  className="p-2 text-slate-500 hover:text-emerald-700 hover:bg-slate-50 rounded-xl"
+                  title="تحديث البيانات"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoadingData ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -556,14 +630,31 @@ export const AdminPanel: React.FC = () => {
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* تبويب 2: إدارة المنتجات (كؤوس وبوكسات فقط + صور متعددة) */}
+        {/* تبويب إدارة التصنيفات */}
+        {activeTab === 'categories' && (
+          <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-7 shadow-xs space-y-5">
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">إدارة تصنيفات المتجر</h3>
+              <p className="text-xs text-slate-500 mt-1">أضف تصنيفات جديدة وستظهر مباشرة في شريط التصنيفات بالمتجر.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 max-w-xl">
+              <input value={newCategory} onChange={e => setNewCategory(e.target.value)} placeholder="مثال: أكواب حرارية" className="flex-1 px-3.5 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm outline-none focus:border-emerald-600" />
+              <button type="button" onClick={handleCreateCategory} className="px-5 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold">إضافة التصنيف</button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {categories.map(category => <div key={category} className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100"><span className="text-emerald-800 text-xs font-bold">{category}</span><div className="flex items-center gap-1"><button type="button" onClick={() => handleRenameCategory(category)} className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-white" title="تعديل التصنيف"><Edit2 className="w-3.5 h-3.5" /></button><button type="button" onClick={() => handleDeleteCategory(category)} className="p-1.5 rounded-lg text-slate-500 hover:text-rose-700 hover:bg-white" title="حذف التصنيف"><Trash2 className="w-3.5 h-3.5" /></button></div></div>)}
+            </div>
+          </div>
+        )}
+
+        {/* تبويب 2: إدارة المنتجات */}
         {/* ------------------------------------------------------------- */}
         {activeTab === 'products' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h3 className="font-bold text-slate-900 text-base">كتالوج المنتجات (الكؤوس والبوكسات)</h3>
-                <p className="text-xs text-slate-500">محددة حصراً في فئتين: الكؤوس، والبوكسات (مجموعات الأكواب) مع دعم صور متعددة</p>
+                <h3 className="font-bold text-slate-900 text-base">كتالوج المنتجات</h3>
+                <p className="text-xs text-slate-500">أضف منتجاتك وصنّفها كما تريد</p>
               </div>
               <button
                 onClick={() => handleOpenProductModal()}
@@ -601,7 +692,7 @@ export const AdminPanel: React.FC = () => {
                       <div>
                         <span className="font-extrabold text-slate-900 text-base">{prod.price.toLocaleString('fr-DZ')}</span>
                         <span className="text-xs font-bold text-emerald-700 mr-1">د.ج</span>
-                        <span className="text-[11px] text-slate-400 block">المخزون: {prod.stock} قطع</span>
+                        {prod.salePrice !== undefined && prod.salePrice < prod.price && <span className="text-[11px] text-emerald-700 block">سعر خاص</span>}
                       </div>
 
                       <div className="flex items-center gap-1">
@@ -719,79 +810,36 @@ export const AdminPanel: React.FC = () => {
         {/* تبويب 4: إعدادات المتجر والشحن المجاني */}
         {/* ------------------------------------------------------------- */}
         {activeTab === 'settings' && settings && (
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-xs max-w-2xl mx-auto text-right">
+          <div className="w-full rounded-3xl border border-slate-200 bg-white p-6 text-right shadow-xs sm:p-8">
             <h3 className="font-bold text-slate-900 text-lg mb-1">
               إعدادات المتجر والشحن المجاني
             </h3>
             <p className="text-xs text-slate-500 mb-6">
-              تحكم في اسم المتجر، الإعلان العلوي، وخيار التوصيل المجاني للطلبات الكبيرة
+              تحكم في الإعلان العلوي وخيار التوصيل المجاني للطلبات الكبيرة
             </p>
 
             <form onSubmit={handleSaveSettings} className="space-y-6">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  اسم المتجر
-                </label>
-                <input
-                  type="text"
-                  value={settings.storeName}
-                  onChange={e => setSettings({ ...settings, storeName: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-emerald-600 rounded-xl text-sm text-slate-900 outline-none"
-                />
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  شريط الإعلانات العلوي
-                </label>
-                <input
-                  type="text"
-                  value={settings.announcement || ''}
-                  onChange={e => setSettings({ ...settings, announcement: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-emerald-600 rounded-xl text-sm text-slate-900 outline-none"
-                />
-              </div>
-
-              {/* قسم الشحن المجاني المحدد بالطلب */}
-              <div className="p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-5 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
+                <div><span className="block text-sm font-bold text-slate-900">تفعيل خاصية الشحن المجاني</span><span className="text-xs text-slate-500">يصبح الشحن مجانياً تلقائياً عند وصول سلة العميل لمبلغ معين</span></div>
+                <div className="flex items-center gap-5">
                   <div>
-                    <span className="font-bold text-sm text-emerald-950 block">
-                      تفعيل خاصية الشحن المجاني
-                    </span>
-                    <span className="text-xs text-emerald-800">
-                      يصبح الشحن مجانياً تلقائياً عند وصول سلة العميل لمبلغ معين
-                    </span>
+                    <label className="mb-2 block text-xs font-bold text-slate-700">الحد الأدنى لمبلغ الطلب حتى يصبح الشحن مجانياً (د.ج)</label>
+                    <div className="flex max-w-xs items-center gap-2">
+                      <input type="number" min="500" step="500" value={settings.freeShippingThreshold} onChange={e => setSettings({ ...settings, freeShippingThreshold: Number(e.target.value) })} className="w-44 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-emerald-700" />
+                      <span className="text-xs font-bold text-emerald-800">د.ج</span>
+                    </div>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
+                  <label className="relative inline-flex cursor-pointer items-center">
                     <input
                       type="checkbox"
                       checked={settings.freeShippingEnabled}
                       onChange={e => setSettings({ ...settings, freeShippingEnabled: e.target.checked })}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-700"></div>
+                    <div className="h-6 w-11 rounded-full bg-slate-300 peer-focus:outline-none peer peer-checked:bg-emerald-700 peer-checked:after:translate-x-full after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all"></div>
                   </label>
                 </div>
-
-                {settings.freeShippingEnabled && (
-                  <div>
-                    <label className="block text-xs font-bold text-emerald-950 mb-1.5">
-                      الحد الأدنى لمبلغ الطلب حتى يصبح الشحن مجانياً (بالدينار الجزائري د.ج)
-                    </label>
-                    <div className="flex items-center gap-2 max-w-xs">
-                      <input
-                        type="number"
-                        min="500"
-                        step="500"
-                        value={settings.freeShippingThreshold}
-                        onChange={e => setSettings({ ...settings, freeShippingThreshold: Number(e.target.value) })}
-                        className="w-full px-3.5 py-2 bg-white border border-emerald-300 focus:border-emerald-700 rounded-xl text-sm font-bold text-slate-900 outline-none"
-                      />
-                      <span className="text-xs font-bold text-emerald-800">د.ج</span>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -801,14 +849,6 @@ export const AdminPanel: React.FC = () => {
                 >
                   حفظ إعدادات المتجر
                 </button>
-
-                <button
-                  type="button"
-                  onClick={handleExportData}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
-                >
-                  تصدير نسخة احتياطية (JSON)
-                </button>
               </div>
             </form>
           </div>
@@ -817,9 +857,9 @@ export const AdminPanel: React.FC = () => {
 
       {/* نافذة إنشاء / تعديل منتج مع دعم الصور المتعددة وفئتي الكؤوس والبوكسات */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 animate-in fade-in">
+        <div className={isProductPage ? 'min-h-screen bg-slate-100 py-8' : 'fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 sm:p-6 backdrop-blur-xs animate-in fade-in'}>
           <div
-            className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 sm:p-8 text-right overflow-y-auto max-h-[90vh]"
+            className={isProductPage ? 'mx-auto w-full max-w-5xl rounded-3xl border border-slate-200 bg-white p-6 text-right shadow-sm sm:p-8' : 'w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 text-right shadow-2xl sm:max-h-[90vh] sm:p-8'}
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
@@ -828,7 +868,7 @@ export const AdminPanel: React.FC = () => {
               </h3>
               <button
                 type="button"
-                onClick={() => setEditingProduct(null)}
+                onClick={() => { setEditingProduct(null); setIsProductPage(false); window.history.pushState({}, '', '/admin/products'); }}
                 className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
@@ -867,31 +907,29 @@ export const AdminPanel: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    الفئة (محددة بـ 2 فقط) *
-                  </label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">التصنيف *</label>
                   <select
-                    value={editingProduct.category || 'الكؤوس'}
-                    onChange={e => setEditingProduct({ ...editingProduct, category: e.target.value as any })}
+                    value={editingProduct.category || categories[0] || 'الكؤوس'}
+                    onChange={e => setEditingProduct({ ...editingProduct, category: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-emerald-600 rounded-xl text-sm text-slate-900 outline-none cursor-pointer"
                   >
-                    <option value="الكؤوس">الكؤوس (الأكواب الفردية)</option>
-                    <option value="البوكسات">البوكسات (مجموعات الأكواب والهدايا)</option>
+                    {categories.map(category => <option key={category} value={category}>{category}</option>)}
                   </select>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    الكمية المتوفرة بالمخزون *
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div><span className="block text-xs font-bold text-slate-900">سعر البيع الخاص</span><span className="text-[11px] text-slate-500">حدد السعر ووقت انتهائه ثم فعّل العرض</span></div>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input type="checkbox" checked={Boolean(editingProduct.discountEnabled)} onChange={e => setEditingProduct({ ...editingProduct, discountEnabled: e.target.checked })} className="peer sr-only" />
+                    <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-emerald-700 peer-focus:ring-2 peer-focus:ring-emerald-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white" />
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={editingProduct.stock || 0}
-                    onChange={e => setEditingProduct({ ...editingProduct, stock: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-emerald-600 rounded-xl text-sm text-slate-900 outline-none"
-                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <input type="number" min="0" disabled={!editingProduct.discountEnabled} value={editingProduct.discountPrice || 0} onChange={e => setEditingProduct({ ...editingProduct, discountPrice: Number(e.target.value) })} placeholder="السعر الخاص (د.ج)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50" />
+                  <input type="datetime-local" disabled={!editingProduct.discountEnabled} value={editingProduct.discountStart || ''} onChange={e => setEditingProduct({ ...editingProduct, discountStart: e.target.value })} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none disabled:cursor-not-allowed disabled:opacity-50" />
+                  <input type="datetime-local" disabled={!editingProduct.discountEnabled} value={editingProduct.discountEnd || ''} onChange={e => setEditingProduct({ ...editingProduct, discountEnd: e.target.value })} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none disabled:cursor-not-allowed disabled:opacity-50" />
                 </div>
               </div>
 
@@ -921,52 +959,19 @@ export const AdminPanel: React.FC = () => {
                 />
               </div>
 
-              {/* قسم الصور المتعددة للمنتج */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800">
-                    صور المنتج (يمكن إضافة عدة صور لنفس المنتج):
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddImageField}
-                    className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>إضافة رابط صورة</span>
-                  </button>
+                  <span className="text-xs font-bold text-slate-800">صور المنتج</span>
+                  <span className="text-[11px] text-slate-500">اختر الصور من جهازك، حتى 6 صور</span>
                 </div>
-
-                <div className="space-y-2">
-                  {productImagesInput.map((url, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <span className="text-xs text-slate-400 font-mono w-5 text-center">{idx + 1}.</span>
-                      <input
-                        type="url"
-                        value={url}
-                        onChange={e => handleUpdateImageUrl(idx, e.target.value)}
-                        placeholder="https://images.unsplash.com/photo-..."
-                        className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-emerald-600"
-                        dir="ltr"
-                      />
-                      {productImagesInput.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveImageField(idx)}
-                          className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <input type="file" accept="image/*" multiple onChange={e => handleImageFiles(e.target.files)} className="w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-xs" />
+                {productImagesInput.length > 0 && <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">{productImagesInput.map((img, idx) => <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-white border border-slate-200"><img src={img} alt={`صورة ${idx + 1}`} className="w-full h-full object-cover" /></div>)}</div>}
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setEditingProduct(null)}
+                  onClick={() => { setEditingProduct(null); setIsProductPage(false); window.history.pushState({}, '', '/admin/products'); }}
                   className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 cursor-pointer"
                 >
                   إلغاء

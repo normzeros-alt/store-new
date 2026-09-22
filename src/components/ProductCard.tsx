@@ -18,13 +18,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const [isAdded, setIsAdded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
-  const isOutOfStock = product.stock <= 0;
   const images = (product.images && product.images.length > 0) ? product.images : (product.image ? [product.image] : []);
   const mainImage = images[0] || 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&q=80';
 
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isOutOfStock) return;
     addToCart(product, 1);
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 1500);
@@ -67,15 +65,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </span>
         )}
 
-        {/* حالة المخزون */}
-        {isOutOfStock && (
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center">
-            <span className="bg-rose-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md">
-              نفد من المخزون
-            </span>
-          </div>
-        )}
-
         {/* زر المعاينة وتفاصيل الصفحة */}
         <div className="absolute bottom-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <button
@@ -95,11 +84,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <span className="text-emerald-800 font-semibold px-2.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200">
               {product.category}
             </span>
-            {product.stock <= 5 && product.stock > 0 && (
-              <span className="text-amber-600 font-medium text-[11px]">
-                متبقي {product.stock} فقط
-              </span>
-            )}
           </div>
 
           <h3 className="font-bold text-slate-900 text-base leading-snug line-clamp-2 group-hover:text-emerald-700 transition-colors">
@@ -117,8 +101,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <span className="text-xs text-slate-400 block font-normal">السعر</span>
             <div className="flex items-baseline gap-1">
               <span className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-                {product.price.toLocaleString('fr-DZ')}
+                {(product.salePrice ?? product.price).toLocaleString('fr-DZ')}
               </span>
+              {product.salePrice !== undefined && product.salePrice < product.price && <span className="text-[11px] text-slate-400 line-through">{product.price.toLocaleString('fr-DZ')}</span>}
               <span className="text-xs font-bold text-emerald-700">
                 {currency}
               </span>
@@ -127,15 +112,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
           <button
             type="button"
-            disabled={isOutOfStock}
             onClick={handleAdd}
-            className={`h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all duration-200 ${
-              isOutOfStock
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                : isAdded
-                ? 'bg-emerald-700 text-white shadow-sm'
-                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-700 hover:text-white border border-emerald-200'
-            }`}
+            className={`h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all duration-200 ${isAdded ? 'bg-emerald-700 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-700 hover:text-white border border-emerald-200'}`}
           >
             {isAdded ? (
               <>

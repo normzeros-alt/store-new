@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, ShoppingCart, Minus, Plus, Truck, ShieldCheck, CheckCircle2, AlertTriangle, Images, Check } from 'lucide-react';
+import { ArrowRight, ShoppingCart, Minus, Plus, Images, Check } from 'lucide-react';
 import { Product, StoreSettings } from '../types';
 import { useCart } from '../context/CartContext';
 import { api } from '../lib/api';
@@ -75,18 +75,14 @@ export const ProductPage: React.FC<ProductPageProps> = ({
 
   const images = (product.images && product.images.length > 0) ? product.images : (product.image ? [product.image] : []);
   const activeImage = images[selectedImageIndex] || images[0] || 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&q=80';
-  const isOutOfStock = product.stock <= 0;
-  const maxStock = product.stock || 1;
 
   const handleAddToCart = () => {
-    if (isOutOfStock) return;
     addToCart(product, quantity);
     setIsAddedToast(true);
     setTimeout(() => setIsAddedToast(false), 2000);
   };
 
   const handleDirectBuy = () => {
-    if (isOutOfStock) return;
     addToCart(product, quantity);
     setIsCheckoutOpen(true);
   };
@@ -134,10 +130,6 @@ export const ProductPage: React.FC<ProductPageProps> = ({
             {/* صور مصغرة (Thumbnails) لاختيار الصور المختلفة */}
             {images.length > 1 && (
               <div className="space-y-2">
-                <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-                  <Images className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>صور إضافية للمنتج ({images.length} صور متوفرة):</span>
-                </div>
                 <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-none">
                   {images.map((img, idx) => (
                     <button
@@ -156,41 +148,15 @@ export const ProductPage: React.FC<ProductPageProps> = ({
                 </div>
               </div>
             )}
-
-            {/* بطاقات ميزات التوصيل الجزائري */}
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-3 text-xs text-slate-700">
-                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Truck className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="font-bold block">شحن لـ 58 ولاية</span>
-                  <span className="text-[11px] text-slate-500">منزل أو مكتب توصيل</span>
-                </div>
-              </div>
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-3 text-xs text-slate-700">
-                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <ShieldCheck className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="font-bold block">الدفع عند الاستلام</span>
-                  <span className="text-[11px] text-slate-500">ضمان سلامة المنتج 100%</span>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* تفاصيل وخيارات المنتج */}
           <div className="flex flex-col justify-between space-y-6">
             <div className="space-y-4">
-              {/* الفئة وحالة المخزون */}
+              {/* الفئة */}
               <div className="flex items-center gap-3">
-                <span className="text-xs font-bold px-3 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  {product.category}
-                </span>
-                <span className="text-xs text-slate-500 font-medium">
-                  كود المنتج: #{product.id}
-                </span>
+                <span className="text-xs font-bold px-3 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">{product.category}</span>
+                <span className="text-xs text-slate-500 font-medium">كود المنتج: #{product.id}</span>
               </div>
 
               {/* الاسم */}
@@ -201,31 +167,12 @@ export const ProductPage: React.FC<ProductPageProps> = ({
               {/* السعر بالدينار الجزائري */}
               <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100 inline-flex items-baseline gap-2">
                 <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-                  {product.price.toLocaleString('fr-DZ')}
+                  {(product.salePrice ?? product.price).toLocaleString('fr-DZ')}
                 </span>
+                {product.salePrice !== undefined && product.salePrice < product.price && <span className="text-sm text-slate-400 line-through">{product.price.toLocaleString('fr-DZ')}</span>}
                 <span className="text-sm font-extrabold text-emerald-700">
                   {currency}
                 </span>
-              </div>
-
-              {/* حالة المخزون */}
-              <div>
-                {isOutOfStock ? (
-                  <span className="text-rose-600 font-semibold text-xs flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4" />
-                    المنتج غير متوفر حالياً في المخزن
-                  </span>
-                ) : product.stock <= 4 ? (
-                  <span className="text-amber-600 font-semibold text-xs flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4" />
-                    متبقي قطع قليلة ({product.stock} قطع متوفرة فقط)
-                  </span>
-                ) : (
-                  <span className="text-emerald-700 font-semibold text-xs flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4" />
-                    متوفر في المخزن وجاهز للإرسال الفوري
-                  </span>
-                )}
               </div>
 
               {/* الوصف المفصل */}
@@ -237,20 +184,11 @@ export const ProductPage: React.FC<ProductPageProps> = ({
                   {product.description}
                 </p>
               </div>
-
-              {product.category === 'البوكسات' && (
-                <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200/80 text-xs text-amber-900 space-y-1">
-                  <span className="font-bold block">✨ مميزات فئة البوكسات:</span>
-                  <p className="text-amber-800 leading-relaxed">
-                    البوكسات تأتي كمجموعة متكاملة من الأكواب المتناسقة مع علبة هدايا فاخرة وتغليف حماية مزدوج ضد الصدمات لضمان وصولها بأعلى درجات الأمان.
-                  </p>
-                </div>
-              )}
             </div>
 
             {/* أدوات الشراء والكمية */}
             <div className="pt-6 border-t border-slate-200 space-y-4">
-              {!isOutOfStock && (
+              {(
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-700">
                     الكمية المطلوبة:
@@ -269,8 +207,7 @@ export const ProductPage: React.FC<ProductPageProps> = ({
                     </span>
                     <button
                       type="button"
-                      onClick={() => setQuantity(q => Math.min(maxStock, q + 1))}
-                      disabled={quantity >= maxStock}
+                      onClick={() => setQuantity(q => q + 1)}
                       className="w-10 h-10 flex items-center justify-center text-slate-600 hover:bg-slate-200 disabled:opacity-40"
                     >
                       <Plus className="w-4 h-4" />
@@ -282,7 +219,6 @@ export const ProductPage: React.FC<ProductPageProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 <button
                   type="button"
-                  disabled={isOutOfStock}
                   onClick={handleAddToCart}
                   className="py-3.5 px-6 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-900 border border-slate-200 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
                 >
@@ -292,7 +228,6 @@ export const ProductPage: React.FC<ProductPageProps> = ({
 
                 <button
                   type="button"
-                  disabled={isOutOfStock}
                   onClick={handleDirectBuy}
                   className="py-3.5 px-6 rounded-xl text-sm font-bold bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center gap-2 shadow-md transition-all disabled:opacity-50 cursor-pointer"
                 >
@@ -308,7 +243,7 @@ export const ProductPage: React.FC<ProductPageProps> = ({
       {product.similar && product.similar.length > 0 && (
         <div className="mt-14">
           <h3 className="text-xl font-bold text-slate-900 mb-6">
-            منتجات أخرى من فئة {product.category}
+            منتجات أخرى من نفس الفئة
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {product.similar.map(sim => (

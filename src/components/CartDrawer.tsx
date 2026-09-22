@@ -5,11 +5,17 @@ import { useCart } from '../context/CartContext';
 interface CartDrawerProps {
   currency?: string;
   onNavigateShopping: () => void;
+  isPage?: boolean;
+  onNavigateCheckout?: () => void;
+  onClosePage?: () => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
   currency = 'د.ج',
-  onNavigateShopping
+  onNavigateShopping,
+  isPage = false,
+  onNavigateCheckout,
+  onClosePage
 }) => {
   const {
     items,
@@ -17,28 +23,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setIsCartOpen,
     updateQuantity,
     removeFromCart,
-    subtotal,
     totalCount,
     setIsCheckoutOpen
   } = useCart();
 
-  if (!isCartOpen) return null;
+  if (!isPage) return null;
 
   const handleProceedToCheckout = () => {
     setIsCartOpen(false);
     setIsCheckoutOpen(true);
+    onNavigateCheckout?.();
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+    <div className={isPage ? 'min-h-[70vh] bg-slate-50 py-8' : 'fixed inset-0 z-50 overflow-hidden'}>
       {/* الخلفية المعتمة */}
-      <div
+      {!isPage && <div
         className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity animate-in fade-in"
         onClick={() => setIsCartOpen(false)}
-      />
+      />}
 
-      <div className="fixed inset-y-0 left-0 max-w-full flex pl-0 sm:pl-10">
-        <div className="w-screen max-w-md bg-white border-r border-slate-200 shadow-2xl flex flex-col text-right">
+      <div className={isPage ? 'mx-auto max-w-4xl px-4' : 'fixed inset-y-0 left-0 max-w-full flex pl-0 sm:pl-10'}>
+        <div className={isPage ? 'flex min-h-[70vh] flex-col rounded-3xl border border-slate-200 bg-white text-right shadow-sm' : 'flex w-screen max-w-md flex-col border-r border-slate-200 bg-white text-right shadow-2xl'}>
           {/* رأس السلة */}
           <div className="p-5 border-b border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -52,7 +58,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => setIsCartOpen(false)}
+              onClick={() => isPage ? onClosePage?.() : setIsCartOpen(false)}
               className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors"
               aria-label="إغلاق السلة"
             >
@@ -120,7 +126,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <div className="flex items-center justify-between mt-2">
                         <div className="flex items-baseline gap-1">
                           <span className="text-sm font-bold text-slate-900">
-                            {(item.product.price * item.quantity).toLocaleString('fr-DZ')}
+                            {((item.product.salePrice ?? item.product.price) * item.quantity).toLocaleString('fr-DZ')}
                           </span>
                           <span className="text-[11px] font-bold text-emerald-700">
                             {currency}
@@ -142,7 +148,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           <button
                             type="button"
                             onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                            disabled={item.quantity >= (item.product.stock || 99)}
                             className="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-200 disabled:opacity-40"
                           >
                             <Plus className="w-3 h-3" />
@@ -159,33 +164,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           {/* تذييل السلة ومجموع الحساب */}
           {items.length > 0 && (
             <div className="p-5 border-t border-slate-200 bg-slate-50 space-y-4">
-              <div className="space-y-1.5 text-xs text-slate-500">
-                <div className="flex justify-between">
-                  <span>المجموع الفرعي للسلع</span>
-                  <span className="font-semibold text-slate-800">
-                    {subtotal.toLocaleString('fr-DZ')} {currency}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>طريقة الدفع</span>
-                  <span className="font-bold text-emerald-700">
-                    الدفع نقداً عند الاستلام (COD)
-                  </span>
-                </div>
-                <div className="pt-2 border-t border-slate-200 flex justify-between text-sm font-bold text-slate-900">
-                  <span>المجموع المقدر (قبل التوصيل)</span>
-                  <span className="text-base text-emerald-700">
-                    {subtotal.toLocaleString('fr-DZ')} {currency}
-                  </span>
-                </div>
-              </div>
-
               <button
                 type="button"
                 onClick={handleProceedToCheckout}
                 className="w-full py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md transition-all duration-200 cursor-pointer"
               >
-                <span>متابعة إتمام الطلب واختيار الولاية</span>
+                <span>المتابعة إلى إتمام الطلب</span>
                 <ArrowRight className="w-4 h-4 rotate-180" />
               </button>
 
