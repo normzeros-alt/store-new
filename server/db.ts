@@ -3,12 +3,18 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { ALGERIA_WILAYAS } from '../src/data/wilayas.ts';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+const bundledDataDir = path.resolve(process.cwd(), 'data');
+const isNetlifyFunction = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isNetlifyFunction ? '/tmp/glass-glow-data' : bundledDataDir;
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
+const bundledDbPath = path.join(bundledDataDir, 'store.sqlite');
 const DB_PATH = path.join(DATA_DIR, 'store.sqlite');
+// Netlify includes the seed database in a read-only bundle; copy it to /tmp so
+// SQLite can create its journal/WAL files and persist changes during warm runs.
+if (isNetlifyFunction && !fs.existsSync(DB_PATH) && fs.existsSync(bundledDbPath)) {
+  fs.copyFileSync(bundledDbPath, DB_PATH);
+}
 export const db = new DatabaseSync(DB_PATH);
 
 // Enable WAL mode and foreign keys for high performance and durability

@@ -26,13 +26,12 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// netlify/functions/api.ts
-var api_exports = {};
-__export(api_exports, {
+// ../../../tmp/api-entry.ts
+var api_entry_exports = {};
+__export(api_entry_exports, {
   handler: () => handler
 });
-module.exports = __toCommonJS(api_exports);
-var import_serverless_http = __toESM(require("serverless-http"), 1);
+module.exports = __toCommonJS(api_entry_exports);
 
 // server.ts
 var import_express = __toESM(require("express"), 1);
@@ -107,11 +106,15 @@ var ALGERIA_WILAYAS = [
 ];
 
 // server/db.ts
-var DATA_DIR = import_node_path.default.resolve(process.cwd(), "data");
-if (!import_node_fs.default.existsSync(DATA_DIR)) {
-  import_node_fs.default.mkdirSync(DATA_DIR, { recursive: true });
-}
+var bundledDataDir = import_node_path.default.resolve(process.cwd(), "data");
+var isNetlifyFunction = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
+var DATA_DIR = isNetlifyFunction ? "/tmp/glass-glow-data" : bundledDataDir;
+if (!import_node_fs.default.existsSync(DATA_DIR)) import_node_fs.default.mkdirSync(DATA_DIR, { recursive: true });
+var bundledDbPath = import_node_path.default.join(bundledDataDir, "store.sqlite");
 var DB_PATH = import_node_path.default.join(DATA_DIR, "store.sqlite");
+if (isNetlifyFunction && !import_node_fs.default.existsSync(DB_PATH) && import_node_fs.default.existsSync(bundledDbPath)) {
+  import_node_fs.default.copyFileSync(bundledDbPath, DB_PATH);
+}
 var db = new import_node_sqlite.DatabaseSync(DB_PATH);
 db.exec("PRAGMA journal_mode = WAL;");
 db.exec("PRAGMA foreign_keys = ON;");
@@ -1098,7 +1101,8 @@ if (process.env.NETLIFY !== "true") {
   start();
 }
 
-// netlify/functions/api.ts
+// ../../../tmp/api-entry.ts
+var import_serverless_http = __toESM(require("serverless-http"));
 var handler = (0, import_serverless_http.default)(app);
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
